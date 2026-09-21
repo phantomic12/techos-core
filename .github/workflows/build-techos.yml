@@ -18,10 +18,66 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Reclaims ~30-40 GB on ubuntu-latest runners. Removes preinstalled
+      # toolchains/SDKs the ISO build never touches. Based on the standard
+      # free-disk-space recipe (jlumbroso/free-disk-space + community docs).
       - name: Free disk space
         run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
-            /usr/local/share/boost /opt/hostedtoolcache || true
+          echo "=== before ==="
+          df -h /
+
+          # Docker images shipped on the runner (~5-10 GB)
+          sudo docker system prune -af --volumes || true
+
+          # Big preinstalled dirs
+          sudo rm -rf \
+            /usr/share/dotnet \
+            /usr/local/lib/android \
+            /opt/ghc \
+            /usr/local/share/boost \
+            /opt/hostedtoolcache \
+            /usr/local/lib/node_modules \
+            /usr/share/swift \
+            /usr/share/miniconda \
+            /opt/az \
+            /usr/local/aws-cli \
+            /usr/local/aws-sam-cli \
+            /usr/local/share/chromium \
+            /opt/microsoft \
+            /opt/google \
+            /usr/lib/jvm \
+            /usr/local/julia* \
+            /opt/pipx \
+            /usr/local/sqlpackage \
+            /opt/runner-cache \
+            "$AGENT_TOOLSDIRECTORY" || true
+
+          # Large apt packages: browsers, JVMs, mono, llvm, powershell, etc.
+          sudo apt-get purge -y -qq \
+            'aspnetcore-*' 'dotnet-*' 'llvm-*' 'php*' 'mongodb-*' 'mysql-*' \
+            'postgresql-*' 'google-chrome-stable' 'firefox' 'microsoft-edge-stable' \
+            'mono-*' 'monodoc-*' 'powershell' 'hhvm' 'azure-cli' \
+            'google-cloud-sdk' 'kubectl' 'helm' 'minikube' 'kubectx' \
+            'r-*' 'ruby-*' 'openjdk-*' 'temurin-*' 'gradle' 'maven' \
+            'ant' 'ant-optional' 'scala' 'sbt' 'dotnet-sdk-*' 'snapd' \
+            'imagemagick' 'imagemagick-6-common' 'libgl1-mesa-dri' \
+            2>/dev/null || true
+          sudo apt-get autoremove -y -qq || true
+          sudo apt-get clean || true
+
+          # Snap leftovers
+          sudo rm -rf /var/lib/snapd/snaps /snap || true
+
+          # Swap file (~4 GB)
+          sudo swapoff -a || true
+          sudo rm -f /swapfile || true
+
+          # Misc caches
+          sudo rm -rf /var/cache/apt /var/lib/apt/lists \
+            /root/.cache /home/*/.cache 2>/dev/null || true
+          sudo journalctl --vacuum-size=10M || true
+
+          echo "=== after ==="
           df -h /
 
       - name: Build builder image
