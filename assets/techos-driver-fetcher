@@ -1,0 +1,16 @@
+#!/bin/bash
+# techos-driver-fetcher: install common proprietary / hardware drivers
+set -euo pipefail
+pkgs=""
+if lspci -k 2>/dev/null | grep -qi nvidia; then
+  pkgs="$pkgs nvidia-driver-535"
+fi
+if lspci -k 2>/dev/null | grep -qi broadcom; then
+  pkgs="$pkgs bcmwl-kernel-source"
+fi
+pkgs="$pkgs firmware-linux-nonfree linux-firmware intel-microcode"
+echo "Drivers selected: $pkgs"
+if [[ -n "$pkgs" ]]; then
+  sudo apt-get update -qq
+  sudo apt-get install -y -qq $pkgs 2>/dev/null || true
+fi
