@@ -97,10 +97,42 @@ jobs:
           ls -lh build/artifacts/
           SIZE=$(stat -c%s build/artifacts/techos-core-amd64.iso)
           echo "ISO size: $SIZE bytes"
-          if [ "$SIZE" -gt 2147483648 ]; then
-            echo "::error::ISO exceeds 2.0 GB target"
+          if [ "$SIZE" -gt 4294967296 ]; then
+            echo "::error::ISO exceeds 4.0 GB hard cap — too large even for split release"
             exit 1
           fi
+
+      # GitHub release assets are capped at 2 GB per file. If the ISO fits,
+      # ship it raw; otherwise split into 1.9 GB zip volumes (.z01/.z02/.zip).
+      - name: Package for release
+        run: |
+          cd build/artifacts
+          SIZE=$(stat -c%s techos-core-amd64.iso)
+          LIMIT=1990000000   # ~1.9 GB safety margin under the 2 GB cap
+          rm -f release-files.txt
+          if [ "$SIZE" -le "$LIMIT" ]; then
+            echo "techos-core-amd64.iso" > release-files.txt
+            echo "ISO fits under 2 GB — shipping raw"
+          else
+            echo "ISO over 2 GB — splitting into zip volumes"
+            rm -f techos-core-amd64.z*
+            zip -s "$LIMIT" -0 techos-core-amd64.zip techos-core-amd64.iso
+            ls -lh techos-core-amd64.z* techos-core-amd64.zip
+            ls techos-core-amd64.z* techos-core-amd64.zip > release-files.txt
+            cat > HOWTO-JOIN.txt <<'EOF'
+          This ISO was split into a multi-volume zip to stay under GitHub's
+          2 GB per-file release limit. Download ALL parts, then:
+
+            zip -F techos-core-amd64.zip --out combined.zip
+            unzip combined.zip
+
+          or with 7z:
+
+            7z x techos-core-amd64.zip
+          EOF
+            echo "HOWTO-JOIN.txt" >> release-files.txt
+          fi
+          cat release-files.txt
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -116,4 +148,9 @@ jobs:
           tag_name: weekly-${{ github.run_number }}
           name: TechOS Core ${{ github.run_number }}
           body: Automated weekly TechOS Core ISO build.
-          files: build/artifacts/techos-core-amd64.iso
+          files: |
+            build/artifacts/techos-core-amd64.iso
+            build/artifacts/techos-core-amd64.z*
+            build/artifacts/techos-core-amd64.zip
+            build/artifacts/HOWTO-JOIN.txt
+            build/artifacts/techos-core-manifest.txt
