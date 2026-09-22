@@ -130,6 +130,15 @@ vlc
 kolourpaint
 xfce4-screensaver
 xfce4-taskmanager
+# Installer + boot splash (real distro pieces)
+calamares
+calamares-settings-ubuntu-common
+plymouth
+plymouth-themes
+plymouth-label
+librsvg2-bin
+polkitd
+pkexec
 # Misc
 network-manager
 network-manager-gnome
@@ -338,6 +347,190 @@ if [[ -f /tmp/techos-setup/assets/techos-panel.tar.bz2 ]]; then
   tar -xjf /tmp/techos-setup/assets/techos-panel.tar.bz2 -C /etc/xdg/xfce4 2>/dev/null || true
   tar -xjf /tmp/techos-setup/assets/techos-panel.tar.bz2 -C /etc/skel/.config/xfce4 2>/dev/null || true
 fi
+
+# ------------------------------------------------------------------------------
+# Distro identity — TechOS is its own OS, not a respin label
+# ------------------------------------------------------------------------------
+cat > /etc/os-release <<'OSREL'
+NAME="TechOS"
+PRETTY_NAME="TechOS Core"
+ID=techos
+ID_LIKE="ubuntu debian"
+VERSION="1.0 (Core)"
+VERSION_ID="1.0"
+VERSION_CODENAME=core
+HOME_URL="https://github.com/phantomic12/techos-core"
+SUPPORT_URL="https://github.com/phantomic12/techos-core/issues"
+BUG_REPORT_URL="https://github.com/phantomic12/techos-core/issues"
+OSREL
+cp /etc/os-release /usr/lib/os-release 2>/dev/null || true
+cat > /etc/lsb-release <<'LSB'
+DISTRIB_ID=TechOS
+DISTRIB_RELEASE=1.0
+DISTRIB_CODENAME=core
+DISTRIB_DESCRIPTION="TechOS Core"
+LSB
+echo "techos" > /etc/hostname
+cat > /etc/hosts <<'HOSTS'
+127.0.0.1   localhost
+127.0.1.1   techos
+::1         localhost ip6-localhost ip6-loopback
+HOSTS
+cat > /etc/issue <<'ISSUE'
+TechOS Core \n \l
+
+ISSUE
+cat > /etc/issue.net <<'ISSUENET'
+TechOS Core
+ISSUENET
+cat > /etc/motd <<'MOTD'
+Welcome to TechOS Core.
+Docs: https://github.com/phantomic12/techos-core
+MOTD
+
+# Plymouth boot splash — TechOS text theme (no image assets needed)
+mkdir -p /usr/share/plymouth/themes/techos
+cat > /usr/share/plymouth/themes/techos/techos.plymouth <<'PLY'
+[Plymouth Theme]
+Name=TechOS
+Description=TechOS Core boot splash
+ModuleName=text
+
+[text]
+Title=TechOS Core
+black=0x0b1220
+white=0xe8eefc
+brown=0x3b82f6
+blue=0x3b82f6
+PLY
+cat > /usr/share/plymouth/themes/techos/techos.script <<'SCR'
+# minimal text splash
+SCR
+update-alternatives --install /usr/share/plymouth/themes/default.plymouth \
+  default.plymouth /usr/share/plymouth/themes/techos/techos.plymouth 100 2>/dev/null || true
+update-alternatives --set default.plymouth \
+  /usr/share/plymouth/themes/techos/techos.plymouth 2>/dev/null || true
+
+# GRUB branding
+cat >> /etc/default/grub <<'GRUB'
+GRUB_DISTRIBUTOR="TechOS"
+GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"
+GRUB_GFXMODE=auto
+GRUB_BACKGROUND=/usr/share/backgrounds/techos-default.jpg
+GRUB
+
+# Calamares installer — TechOS branding + live-session autostart
+mkdir -p /etc/calamares
+cat > /etc/calamares/settings.conf <<'CAL'
+---
+modules-search: [ local, /usr/lib/x86_64-linux-gnu/calamares/modules ]
+instances:
+- id:       main
+  module:   dummypython
+  config:   dummypython.conf
+sequence:
+- show:
+  - welcome
+  - locale
+  - keyboard
+  - partition
+  - users
+  - summary
+- exec:
+  - partition
+  - mount
+  - unpackfs
+  - networkcfg
+  - machineid
+  - fstab
+  - locale
+  - keyboard
+  - localecfg
+  - users
+  - displaymanager
+  - packages
+  - grubcfg
+  - bootloader
+  - umount
+- show:
+  - finished
+branding: techos
+prompt-install: true
+dont-chroot: false
+CAL
+
+mkdir -p /etc/calamares/branding/techos
+cat > /etc/calamares/branding/techos/branding.desc <<'BRAND'
+---
+componentName: techos
+welcomeStyleCalamares: true
+welcomeExpandingLogo: true
+strings:
+    productName:         TechOS
+    shortProductName:    TechOS
+    version:             1.0 Core
+    shortVersion:        1.0
+    versionedName:       TechOS 1.0 Core
+    shortVersionedName:  TechOS 1.0
+    bootloaderEntryName: TechOS
+    productUrl:          https://github.com/phantomic12/techos-core
+    supportUrl:          https://github.com/phantomic12/techos-core/issues
+    knownIssuesUrl:      https://github.com/phantomic12/techos-core/issues
+    releaseNotesUrl:     https://github.com/phantomic12/techos-core/releases
+images:
+    productLogo:         "logo.png"
+    productIcon:         "logo.png"
+    productWelcome:      "welcome.png"
+    welcome:             "welcome.png"
+windowPlacement: center
+BRAND
+
+# Simple generated logo for Calamares branding (SVG -> PNG if rsvg available, else skip)
+if command -v rsvg-convert >/dev/null 2>&1; then
+  cat > /tmp/techos-logo.svg <<'SVG'
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><circle cx="128" cy="128" r="120" fill="#0b1220"/><circle cx="128" cy="128" r="118" fill="none" stroke="#3b82f6" stroke-width="4"/><text x="128" y="160" font-family="sans-serif" font-size="110" font-weight="bold" fill="#3b82f6" text-anchor="middle">T</text></svg>
+SVG
+  rsvg-convert -w 256 -h 256 /tmp/techos-logo.svg -o /etc/calamares/branding/techos/logo.png 2>/dev/null || true
+  rsvg-convert -w 640 -h 360 /tmp/techos-logo.svg -o /etc/calamares/branding/techos/welcome.png 2>/dev/null || true
+fi
+# Fallback: copy any provided asset
+cp /tmp/techos-setup/assets/icons/tech-logo.png /etc/calamares/branding/techos/logo.png 2>/dev/null || true
+cp /tmp/techos-setup/assets/icons/tech-logo.png /etc/calamares/branding/techos/welcome.png 2>/dev/null || true
+
+# unpackfs module — copy the live squashfs to target
+mkdir -p /etc/calamares/modules
+cat > /etc/calamares/modules/unpackfs.conf <<'UNPACK'
+---
+unpack:
+    -   source: "/run/medium/casper/filesystem.squashfs"
+        sourcefs: "squashfs"
+        destination: ""
+UNPACK
+
+# packages module — remove live-only packages on installed system
+cat > /etc/calamares/modules/packages.conf <<'PKGS'
+---
+backend: apt
+operations:
+  - remove:
+    - casper
+    - calamares
+    - calamares-settings-ubuntu-common
+PKGS
+
+# "Install TechOS" launcher on live desktop
+cat > /usr/share/applications/techos-install.desktop <<'DESKTOP'
+[Desktop Entry]
+Name=Install TechOS
+Comment=Install TechOS Core to this computer
+Exec=pkexec calamares
+Icon=system-software-install
+Type=Application
+Categories=System;
+DESKTOP
+mkdir -p /etc/skel/Desktop
+cp /usr/share/applications/techos-install.desktop /etc/skel/Desktop/
+chmod +x /etc/skel/Desktop/techos-install.desktop
 
 # Live user
 if ! id -u techos >/dev/null 2>&1; then
