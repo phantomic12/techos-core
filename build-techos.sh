@@ -549,8 +549,8 @@ autologin-user-timeout=0
 user-session=xfce
 CONF
 
-# Final cleanup
-apt-get upgrade -y -qq 2>/dev/null || true
+# Final cleanup — keep our modified conffiles (/etc/issue etc.) on upgrade
+apt-get -o Dpkg::Options::="--force-confold" upgrade -y -qq 2>/dev/null || true
 apt-get autoremove -y -qq
 apt-get clean
 
