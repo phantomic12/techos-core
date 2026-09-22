@@ -107,6 +107,7 @@ jobs:
       - name: Package for release
         run: |
           cd build/artifacts
+          sudo chown -R "$USER:$USER" .
           SIZE=$(stat -c%s techos-core-amd64.iso)
           LIMIT=1990000000   # ~1.9 GB safety margin under the 2 GB cap
           rm -f release-files.txt
